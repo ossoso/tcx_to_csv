@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 TEMP_DATA_FILE = 'tmp_data.txt'
 TEMP_META_FILE = 'tmp_meta.txt'
-TEMP_LIST = [TEMP_META_FILE, TEMP_DATA_FILE]
+TEMP_LIST = (TEMP_META_FILE, TEMP_DATA_FILE)
 
 def strip_ns(string):
     return string.split('}')[1]

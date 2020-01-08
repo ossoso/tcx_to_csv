@@ -30,7 +30,7 @@ headerDi = {
 
 def parse_source(source, src_type="file"):
     if src_type == "file":
-        root = etree.parse(in_filename, etree.XMLParser())
+        root = etree.parse(source, etree.XMLParser()).getroot()
         return root
     elif src_type == "string":
         return etree.fromstring(source)

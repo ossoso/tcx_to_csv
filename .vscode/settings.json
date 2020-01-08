@@ -1,0 +1,7 @@
+{
+    "python.pythonPath": "C:\\ProgramData\\Miniconda3\\python.exe",
+    "vim.easymotionMarkerBackgroundColor": "lime",
+    "vim.foldfix": true,
+    "vim.hlsearch": true,
+    "vim.visualstar": true
+}

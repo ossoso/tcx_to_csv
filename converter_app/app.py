@@ -2,6 +2,7 @@ from collections import OrderedDict
 from itertools import chain
 import dash
 from dash.dependencies import Input, Output, State
+from dash.exceptions import PreventUpdate
 import dash_core_components as dcc
 import dash_html_components as html
 import dash_table
@@ -31,6 +32,8 @@ external_stylesheets = [
     "/assets/style.css",
 ]
 
+INVISIBLE = {'display': 'none'}
+
 
 app = dash.Dash(
     __name__,
@@ -43,59 +46,56 @@ server = app.server
 
 def datashader_figs():
     return [
+        # html.Div(
+        #     id="header",
+        #     children=[
+        #         html.Div(
+        #             [
+        #                 html.H3(
+        #                     "Select range by dragging to calculate average power"
+        #                 )
+        #         ],
+        #             className="eight columns",
+        #         ),
+        #     ],
+        #     className="row",
+        # ),
+        html.Hr(),
         html.Div(
-            id="header",
-            children=[
-                html.Div(
-                    [
-                        html.H3(
-                            "Visualize millions of points with datashader and Plotly"
-                        )
-                ],
-                    className="eight columns",
-                ),
-                html.Div([html.Img(id="logo", src=app.get_asset_url("dash-logo.png"))]),
+            [
+                html.Div(id='graphing-container', style=INVISIBLE, className="twelve columns",
+                    children=[
+                        html.P(
+                            "Click and drag on the plot to calculate average power for effort",
+                            id="header-1",
+                        ),
+                        dcc.Graph(
+                            id="graph-1", config={"doubleClick": "reset"}
+                        ),
+                    ],
+                )
             ],
             className="row",
         ),
-        html.Hr(),
         html.Div(
             [
                 html.Div(
                     [
                         html.P(
-                            "Click and drag on the plot for high-res view of\
-             selected data",
-                            id="header-1",
+                            children=[
+                                html.Span(
+                                    children=[" points selected"], id="header-2-p"
+                                ),
+                            ],
+                            id="header-2",
                         ),
-                        dcc.Graph(
-                            id="graph-1", figure=fig1, config={"doubleClick": "reset"}
-                        ),
+                        dcc.Graph(id="graph-2"),
                     ],
                     className="twelve columns",
                 )
             ],
             className="row",
         ),
-        # html.Div(
-        #     [
-        #         html.Div(
-        #             [
-        #                 html.P(
-        #                     children=[
-        #                         html.Span(
-        #                             children=[" points selected"], id="header-2-p"
-        #                         ),
-        #                     ],
-        #                     id="header-2",
-        #                 ),
-        #                 dcc.Graph(id="graph-2", figure=fig2),
-        #             ],
-        #             className="twelve columns",
-        #         )
-        #     ],
-        #     className="row",
-        # ),
     ]
 
 
@@ -109,12 +109,21 @@ USED_COLNAMES = [POWER_COLNAME, CADENCE_COLNAME, TIME_COLNAME]
 TIME_MATCH_STR = 'time'
 
 PERF_COLS_MATCH_STR = [
+    'time',
     'power',
     'cadence',
     'heart'
 ]
 
 match_str_colname_map = OrderedDict(zip(PERF_COLS_MATCH_STR, USED_COLNAMES))
+
+def _parseSelectedJSON(option_id, jsonStr):
+    return pd.DataFrame(json.loads(jsonStr)[option_id])
+
+def jsonify_dfs(dfDictL):
+    # newL = [{d['filename']: d['df'].to_dict()} for d in dfDictL]
+    newL = {filename: df.to_dict() for (filename, df) in dfDictL}
+    return json.dumps(newL, ignore_nan=True)
 
 def import_csv(source, filename, src_type="filepath"):
     if src_type == 'filepath':
@@ -250,12 +259,12 @@ def exmpl_setup_plot_canvas():
     time_start = df['Time'].values[0]
     time_end = df['Time'].values[-1]
 
-    cvs = ds.Canvas(x_range=x_range, y_range=y_range)
+    # cvs = ds.Canvas(x_range=x_range, y_range=y_range)
 
-    aggs = OrderedDict((c, cvs.line(df, 'Time', c)) for c in cols)
-    img = tf.shade(aggs['Signal'])
+    # aggs = OrderedDict((c, cvs.line(df, 'Time', c)) for c in cols)
+    # img = tf.shade(aggs['Signal'])
 
-    arr = np.array(img)
+    # arr = np.array(img)
     z = arr.tolist()
 
     # axes
@@ -265,12 +274,9 @@ def exmpl_setup_plot_canvas():
     y = np.linspace(y_range[0], y_range[1], dims[0])
     return (x, y, z)
 
-def setup_plot_canvas(empty=True):
-    if empty:
-        return exmpl_setup_plot_canvas()
+def setup_plot_canvas(df):
     cols = [POWER_COLNAME]
     # data = {c: signal + noise(1, 10 * (np.random.random() - 0.5), n) for c in cols}
-
     time_start = df[TIME_COLNAME].values[0]
     time_end = df[TIME_COLNAME].values[-1]
 
@@ -295,78 +301,85 @@ def setup_plot_canvas(empty=True):
 
 
 # if 'df' in vars() or 'df' in globals():
-x, y, z = setup_plot_canvas()
+# x, y, z = setup_plot_canvas()
 # global fig1
-fig1 = {
-    "data": [
-        {
-            "x": x,
-            "y": y,
-            "z": z,
-            "type": "heatmap",
-            "showscale": False,
-            "colorscale": [[0, "rgba(255, 255, 255,0)"], [1, "#a3a7b0"]],
-        }
-    ],
-    "layout": {
-        "margin": {"t": 50, "b": 20},
-        "height": 250,
-        "xaxis": {
-            "showline": True,
-            "zeroline": False,
-            "showgrid": False,
-            "showticklabels": True,
-            "color": "#a3a7b0",
+def generateFig(x, y, z, scope):
+    fullFig = scope == 'full'
+    fig = {
+        "data": [
+            {
+                "x": x,
+                "y": y,
+                "z": z,
+                "type": "heatmap",
+                "showscale": False,
+                "colorscale": [[0, "rgba(255, 255, 255,0)"],
+                               [1, ( "#a3a7b0" if fullFig else
+                                      "#75baf2")]],
+            }
+        ],
+        "layout": {
+            "margin": {"t": 50, "b": 20},
+            "height": 250,
+            "xaxis": {
+                "fixedrange": fullFig,
+                "showline": True,
+                "zeroline": False,
+                "showgrid": False,
+                "showticklabels": True,
+                "color": "#a3a7b0",
+            },
+            "yaxis": {
+                "fixedrange": True,
+                "showline": True,
+                "zeroline": False,
+                "showgrid": False,
+                "showticklabels": True,
+                "ticks": "",
+                "color": "#a3a7b0",
+            },
+            "plot_bgcolor": "#23272c",
+            "paper_bgcolor": "#23272c",
         },
-        "yaxis": {
-            "fixedrange": True,
-            "showline": True,
-            "zeroline": False,
-            "showgrid": False,
-            "showticklabels": True,
-            "ticks": "",
-            "color": "#a3a7b0",
-        },
-        "plot_bgcolor": "#23272c",
-        "paper_bgcolor": "#23272c",
-    },
-}
-global fig2
-fig2 = {
-    "data": [
-        {
-            "x": x,
-            "y": y,
-            "z": z,
-            "type": "heatmap",
-            "showscale": False,
-            "colorscale": [[0, "rgba(255, 255, 255,0)"], [1, "#75baf2"]],
-        }
-    ],
-    "layout": {
-        "margin": {"t": 50, "b": 20},
-        "height": 250,
-        "xaxis": {
-            "fixedrange": True,
-            "showline": True,
-            "zeroline": False,
-            "showgrid": False,
-            "showticklabels": True,
-            "color": "#a3a7b0",
-        },
-        "yaxis": {
-            "fixedrange": True,
-            "showline": True,
-            "zeroline": False,
-            "showgrid": False,
-            "showticklabels": True,
-            "ticks": "",
-            "color": "#a3a7b0",
-        },
-        "plot_bgcolor": "#23272c",
-        "paper_bgcolor": "#23272c",
-    },
-}
+    }
+    return fig
+
+# global fig2
+# fig2 = {
+#     "data": [
+#         {
+#             "x": x,
+#             "y": y,
+#             "z": z,
+#             "type": "heatmap",
+#             "showscale": False,
+#             "colorscale": [[0, "rgba(255, 255, 255,0)"], [1, "#75baf2"]],
+#         }
+#     ],
+#     "layout": {
+#         "margin": {"t": 50, "b": 20},
+#         "height": 250,
+#         "xaxis": {
+#             "fixedrange": True,
+#             "showline": True,
+#             "zeroline": False,
+#             "showgrid": False,
+#             "showticklabels": True,
+#             "color": "#a3a7b0",
+#         },
+#         "yaxis": {
+#             "fixedrange": True,
+#             "showline": True,
+#             "zeroline": False,
+#             "showgrid": False,
+#             "showticklabels": True,
+#             "ticks": "",
+#             "color": "#a3a7b0",
+#         },
+#         "plot_bgcolor": "#23272c",
+#         "paper_bgcolor": "#23272c",
+#     },
+# }
 
 app.layout = html.Div(
     [
@@ -391,8 +404,18 @@ app.layout = html.Div(
                 # Allow multiple files to be uploaded
         multiple=True
             ),
-            *datashader_figs(),
-            html.Div(id='selected-dataframe-container'),
+            html.Div(id='selected-dataframe-container', children=[
+                html.Div([
+                    dcc.Dropdown(
+                        id='loaded-dataframes', searchable=False
+                    ),
+                    html.Button(id='plot-imported-btn', n_clicks=0, children='Plot'),
+                    html.Button(id='download-imported-btn', n_clicks=0, children='Download CSV'),
+                ], className="row"),
+                html.Div(id='activities-json', style={'display': 'none'}),
+                html.Div(id='activity-ids', style={'display': 'none'}),
+                *datashader_figs(),
+            ]),
         ]),
     ]
 )
@@ -411,7 +434,6 @@ def selectionRange(selection):
         sub_df = df[(df[TIME_COLNAME] >= x0) & (df[TIME_COLNAME] <= x1)]
         selection_stats = power_stats(sub_df)
         power = list(selection_stats.items())[0][1]
-        print(selection_stats)
         num_pts = len(sub_df)
         if num_pts < max_points:
             number = "{:,}".format(
@@ -436,9 +458,13 @@ def selectionRange(selection):
     # return number, number_print
 
 
-# @app.callback(Output("graph-2", "figure"), [Input("graph-1", "relayoutData")])
-def selectionHighlight(selection):
-    new_fig2 = fig2.copy()
+@app.callback(Output("graph-2", "figure"), [Input("graph-1", "relayoutData")], [State('loaded-dataframes', 'value'), State('activities-json', 'children')])
+def selectionHighlight(selection, value, jsonStr):
+    if value is None:
+        raise PreventUpdate
+    df = _parseSelectedJSON(value, jsonStr)
+    fig_args = setup_plot_canvas(df)
+    fig2 = generateFig(*fig_args, scope='selection')
     if (
         selection is not None
         and "xaxis.range[0]" in selection
@@ -469,12 +495,13 @@ def selectionHighlight(selection):
     return None
 
 
-#@app.callback(Output("graph-1", "figure"), [Input("graph-1", "relayoutData"), Input('loaded-dataframes', 'value')])
-def draw_undecimated_data(selection, value):
+@app.callback([Output("graph-1", "figure"), Output("graphing-container", "style")], [Input("graph-1", "relayoutData"), Input('loaded-dataframes', 'value')], [State('activities-json', 'children')])
+def draw_undecimated_data(selection, value, jsonStr):
     if value is None:
         raise PreventUpdate
-    
-        self.driver.find_element_by_css_selector(selector)
+    df = _parseSelectedJSON(value, jsonStr)
+    fig_args = setup_plot_canvas(df)
+    fig1 = generateFig(*fig_args, scope='full')
     if (
         selection is not None
         and "xaxis.range[0]" in selection
@@ -504,43 +531,39 @@ def draw_undecimated_data(selection, value):
         high_res = dict(data=high_res_data, layout=high_res_layout)
     else:
         high_res = fig1.copy()
-    return high_res
+    return (high_res, None)
 
-def jsonify_dfs(dfDictL):
-    # newL = [{d['filename']: d['df'].to_dict()} for d in dfDictL]
-    newL = [{filename: df.to_dict()} for (filename, df) in dfDictL]
-    return json.dumps(newL, ignore_nan=True)
+@app.callback(Output('loaded-dataframes', 'options'),
+               [Input('activity-ids', 'children')])
+def update_options(storedJSON):
+    if not storedJSON:
+        raise PreventUpdate
+    optionL = json.loads(storedJSON)
+    return [{'label': id, 'value': id} for id in optionL]
 
-@app.callback(Output('selected-dataframe-container', 'children'),
-              [Input('data-upload', 'contents')],
+
+
+@app.callback([Output('activity-ids', 'children'), Output('selected-dataframe-container', 'style')               Output('activities-json', 'children')], [Input('data-upload', 'contents')],
               [State('data-upload', 'filename'),
                State('data-upload', 'last_modified')])
 def process_uploaded(list_of_contents, list_of_names, list_of_dates):
     #to_iterable = lambda a: a if isinstance(a, tuple) else (a,)
-    if list_of_contents is not None:
+    if list_of_contents is None:
+        return (None, INVISIBLE, None)
+    else:
         try:
             dfTupList = [
                 parse_contents(c, n, d) for c, n, d in
                 zip(list_of_contents, list_of_names, list_of_dates)
             ]
             dfTupList = list(chain(*dfTupList))
-            print(dfTupList)
         except Exception as e:
             print("excepted: stuff")
             print(e)
             return None
-        return [
-            html.Div([
-                dcc.Dropdown(
-                id='loaded-dataframes',
-                options=[{'label': data_id, 'value': data_id} for (data_id, df)
-                        in dfTupList]
-                ),
-                html.Button(id='plot-imported-btn', n_clicks=0, children='Plot'),
-                html.Button(id='download-imported-btn', n_clicks=0, children='Download CSV'),
-            ]),
-            html.Div(id='activity-jsons', children=jsonify_dfs(dfTupList), style={'display': 'none'})
-            ]
+        df_optionL = [data_id for (data_id, _) in dfTupList]
+        optionJSON = json.dumps(df_optionL)
+        return (optionJSON, None, jsonify_dfs(dfTupList))
 
 
 if __name__ == "__main__":

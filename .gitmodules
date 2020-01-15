@@ -1,0 +1,3 @@
+[submodule "converter_app/cypress_starter"]
+	path = converter_app/cypress_starter
+	url = https://github.com/cypress-io/cypress-tutorial-build-todo-starter

@@ -1,0 +1,7 @@
+include my_dash_component/my_dash_component.min.js
+include my_dash_component/my_dash_component.min.js.map
+include my_dash_component/metadata.json
+include my_dash_component/package-info.json
+include README.md
+include LICENSE
+include package.json

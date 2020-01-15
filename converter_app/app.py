@@ -34,7 +34,6 @@ external_stylesheets = [
 
 INVISIBLE = {'display': 'none'}
 
-
 app = dash.Dash(
     __name__,
     external_stylesheets=external_stylesheets,
@@ -61,41 +60,35 @@ def datashader_figs():
         #     className="row",
         # ),
         html.Hr(),
-        html.Div(
-            [
-                html.Div(id='graphing-container', style=INVISIBLE, className="twelve columns",
-                    children=[
-                        html.P(
-                            "Click and drag on the plot to calculate average power for effort",
-                            id="header-1",
-                        ),
-                        dcc.Graph(
-                            id="graph-1", config={"doubleClick": "reset"}
-                        ),
-                    ],
-                )
-            ],
-            className="row",
-        ),
-        html.Div(
-            [
-                html.Div(
-                    [
-                        html.P(
-                            children=[
-                                html.Span(
-                                    children=[" points selected"], id="header-2-p"
-                                ),
-                            ],
-                            id="header-2",
-                        ),
-                        dcc.Graph(id="graph-2"),
-                    ],
-                    className="twelve columns",
-                )
-            ],
-            className="row",
-        ),
+        html.Div([
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.P(
+                                "Click and drag on the plot to calculate average power for effort",
+                                id="header-1",
+                            ),
+                            dcc.Graph(
+                                id="graph-1", config={"doubleClick": "reset"}
+                            ),
+                        ], className="twelve columns",
+                    )
+                ], className="row",
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.P(
+                                id="header-2",
+                            ),
+                        dcc.Graph(id="graph-2", style=INVISIBLE),
+                        ], className="twelve columns",
+                    )
+                ], className="row",
+            )
+        ], id='graphing-container', style=INVISIBLE)
     ]
 
 
@@ -304,7 +297,7 @@ def setup_plot_canvas(df):
 # x, y, z = setup_plot_canvas()
 # global fig1
 def generateFig(x, y, z, scope):
-    fullFig = scope == 'full'
+    fullFig = scope != 'full'
     fig = {
         "data": [
             {
@@ -412,8 +405,8 @@ app.layout = html.Div(
                     html.Button(id='plot-imported-btn', n_clicks=0, children='Plot'),
                     html.Button(id='download-imported-btn', n_clicks=0, children='Download CSV'),
                 ], className="row"),
-                html.Div(id='activities-json', style={'display': 'none'}),
-                html.Div(id='activity-ids', style={'display': 'none'}),
+                html.Div(id='activities-json', style=INVISIBLE),
+                html.Div(id='activity-ids', style=INVISIBLE),
                 *datashader_figs(),
             ]),
         ]),
@@ -422,13 +415,17 @@ app.layout = html.Div(
 
 # Callbacks
 
-#@app.callback( Output("header-2-p", "children"), [Input("graph-1", "relayoutData")],)
-def selectionRange(selection):
+@app.callback( Output("header-2", "children"), [Input("graph-1", "relayoutData")], [State('loaded-dataframes', 'value'), State('activities-json', 'children')])
+def selectionRange(selection, value, jsonStr):
     if (
-        selection is not None
-        and "xaxis.range[0]" in selection
-        and "xaxis.range[1]" in selection
+        selection is None
+        or "xaxis.range[0]" not in selection
+        or "xaxis.range[1]" not in selection
     ):
+        # number = "0"
+        number_print = None
+    else:
+        df = _parseSelectedJSON(value, jsonStr)
         x0 = selection["xaxis.range[0]"]
         x1 = selection["xaxis.range[1]"]
         sub_df = df[(df[TIME_COLNAME] >= x0) & (df[TIME_COLNAME] <= x1)]
@@ -440,25 +437,13 @@ def selectionRange(selection):
                 abs(int(selection["xaxis.range[1]"]) - int(selection["xaxis.range[0]"]))
             )
             # number_print = " points selected between {0:,.4} and {1:,.4}".format(
-            number_print = " Your average power for period {0:,.4}s..{1:,.4}s was {2:,.4} Watts".format(
-                selection["xaxis.range[0]"], selection["xaxis.range[1]"], power
+            number_print = " Your average power for period {0}s..{1}s was {2:,.4} Watts".format(
+                *(round(selection[sel_range], 2) for sel_range
+                 in ["xaxis.range[0]", "xaxis.range[1]"]), round(power, 2)
             )
-        else:
-            number = "{:,}".format(
-                abs(int(selection["xaxis.range[1]"]) - int(selection["xaxis.range[0]"]))
-            )
-            number_print = " points selected. Select less than {0:}k \
-            points to invoke high-res scattergl trace".format(
-                max_points / 1000
-            )
-    else:
-        number = "0"
-        number_print = " points selected"
     return number_print
-    # return number, number_print
 
-
-@app.callback(Output("graph-2", "figure"), [Input("graph-1", "relayoutData")], [State('loaded-dataframes', 'value'), State('activities-json', 'children')])
+@app.callback([Output("graph-2", "figure"), Output("graph-2", "style")], [Input("graph-1", "relayoutData")], [State('loaded-dataframes', 'value'), State('activities-json', 'children')])
 def selectionHighlight(selection, value, jsonStr):
     if value is None:
         raise PreventUpdate
@@ -486,13 +471,12 @@ def selectionHighlight(selection, value, jsonStr):
                 line={"width": 0},
                 fillcolor="rgba(165, 131, 226, 0.10)",
             )
-            new_fig2["layout"]["shapes"] = [shape]
+            fig2["layout"]["shapes"] = [shape]
         else:
-            new_fig2["layout"]["shapes"] = []
+            fig2["layout"]["shapes"] = []
     else:
-        new_fig2["layout"]["shapes"] = []
-    # return new_fig2
-    return None
+        fig2["layout"]["shapes"] = []
+    return (fig2, None)
 
 
 @app.callback([Output("graph-1", "figure"), Output("graphing-container", "style")], [Input("graph-1", "relayoutData"), Input('loaded-dataframes', 'value')], [State('activities-json', 'children')])
@@ -543,7 +527,7 @@ def update_options(storedJSON):
 
 
 
-@app.callback([Output('activity-ids', 'children'), Output('selected-dataframe-container', 'style')               Output('activities-json', 'children')], [Input('data-upload', 'contents')],
+@app.callback([Output('activity-ids', 'children'), Output('selected-dataframe-container', 'style'),               Output('activities-json', 'children')], [Input('data-upload', 'contents')],
               [State('data-upload', 'filename'),
                State('data-upload', 'last_modified')])
 def process_uploaded(list_of_contents, list_of_names, list_of_dates):

@@ -24,6 +24,7 @@ from os.path import abspath
 
 #src_dir_path = basename(abspath(getsourcefile(lambda:0)))
 from tcx_converter import convert_to_csv
+from hiddendivdownloaderbutton import HiddenDivDownloaderButton
 
 # Layout
 
@@ -111,7 +112,18 @@ PERF_COLS_MATCH_STR = [
 match_str_colname_map = OrderedDict(zip(PERF_COLS_MATCH_STR, USED_COLNAMES))
 
 def _parseSelectedJSON(option_id, jsonStr):
+    csvStr = json.loads(jsonStr)[option_id]
+    csvBuff = io.StringIO(csvStr)
+    return pd.read_csv(csvBuff)
+
+
+def __parseSelectedJSON(option_id, jsonStr):
     return pd.DataFrame(json.loads(jsonStr)[option_id])
+
+def csvify_dfs(dfDictL):
+    # newL = [{d['filename']: d['df'].to_dict()} for d in dfDictL]
+    newL = {filename: df.to_csv() for (filename, df) in dfDictL}
+    return json.dumps(newL, ignore_nan=True)
 
 def jsonify_dfs(dfDictL):
     # newL = [{d['filename']: d['df'].to_dict()} for d in dfDictL]
@@ -136,9 +148,10 @@ def import_csv(source, filename, src_type="filepath"):
     dfTup = (splitext(basename(filename))[0], sel_df.rename(columns=match_str_colname_map))
     return dfTup
 
-def import_tcx(source, src_type):
-    csv_files = convert_to_csv(source, src_type)
-    dfTup = tuple(import_csv(fname, fname) for fname in csv_files)
+def import_tcx_mem(source):
+    csv_files = convert_to_csv(source, src_type='string')
+    print(csv_files.__str__()[0:400])
+    dfTup = tuple(import_csv(csvStr, fname, 'bytestr') for fname, csvStr in csv_files)
     return dfTup
 
 # # Default plot ranges:
@@ -202,19 +215,17 @@ def parse_contents(contents, filename, date):
     content_type, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
     stringBuff = decoded.decode('utf-8')
-    tcx_bytestring = bytes(bytearray(stringBuff, encoding = 'utf-8'))
+    bytestring = bytes(bytearray(stringBuff, encoding = 'utf-8'))
     try:
         if 'tcx' in filename:
             # Assume that the user uploaded a TCX file
-            dfTup = import_tcx(tcx_bytestring, src_type="string")
+            dfTup = import_tcx_mem(bytestring)
         if 'csv' in filename:
             # Assume that the user uploaded a CSV file
-            dfTup = tuple(import_csv(tcx_bytestring, filename, src_type="bytestr"))
+            dfTup = tuple(import_csv(bytestring, filename, src_type="bytestr"))
     except Exception as e:
-        print(e)
-        return html.Div([
-            'There was an error processing this file.'
-        ])
+        raise e
+        print('error at parse_contents\n' +  e)
     return dfTup
 
 
@@ -399,13 +410,16 @@ app.layout = html.Div(
             ),
             html.Div(id='selected-dataframe-container', children=[
                 html.Div([
+                    html.Div([
                     dcc.Dropdown(
                         id='loaded-dataframes', searchable=False
+                    )], className="twelve columns"
                     ),
-                    html.Button(id='plot-imported-btn', n_clicks=0, children='Plot'),
-                    html.Button(id='download-imported-btn', n_clicks=0, children='Download CSV'),
+                    HiddenDivDownloaderButton(
+                        id='downloadable-div-store', label='Download CSV'),
+                    # html.Button(id='plot-imported-btn', n_clicks=0, children='Plot'),
+                    # html.Button(id='downloadable-div-store', n_clicks=0, children='Download CSV'),
                 ], className="row"),
-                html.Div(id='activities-json', style=INVISIBLE),
                 html.Div(id='activity-ids', style=INVISIBLE),
                 *datashader_figs(),
             ]),
@@ -415,7 +429,7 @@ app.layout = html.Div(
 
 # Callbacks
 
-@app.callback( Output("header-2", "children"), [Input("graph-1", "relayoutData")], [State('loaded-dataframes', 'value'), State('activities-json', 'children')])
+@app.callback( Output("header-2", "children"), [Input("graph-1", "relayoutData")], [State('loaded-dataframes', 'value'), State('downloadable-div-store', 'hiddenDivData')])
 def selectionRange(selection, value, jsonStr):
     if (
         selection is None
@@ -443,7 +457,7 @@ def selectionRange(selection, value, jsonStr):
             )
     return number_print
 
-@app.callback([Output("graph-2", "figure"), Output("graph-2", "style")], [Input("graph-1", "relayoutData")], [State('loaded-dataframes', 'value'), State('activities-json', 'children')])
+@app.callback([Output("graph-2", "figure"), Output("graph-2", "style")], [Input("graph-1", "relayoutData")], [State('loaded-dataframes', 'value'), State('downloadable-div-store', 'hiddenDivData')])
 def selectionHighlight(selection, value, jsonStr):
     if value is None:
         raise PreventUpdate
@@ -479,7 +493,12 @@ def selectionHighlight(selection, value, jsonStr):
     return (fig2, None)
 
 
-@app.callback([Output("graph-1", "figure"), Output("graphing-container", "style")], [Input("graph-1", "relayoutData"), Input('loaded-dataframes', 'value')], [State('activities-json', 'children')])
+@app.callback(Output("downloadable-div-store", "filename"), [Input('loaded-dataframes', 'value')])
+def updateDownloadFName(filename):
+    return filename
+
+
+@app.callback([Output("graph-1", "figure"), Output("graphing-container", "style")], [Input("graph-1", "relayoutData"), Input('loaded-dataframes', 'value')], [State('downloadable-div-store', 'hiddenDivData')])
 def draw_undecimated_data(selection, value, jsonStr):
     if value is None:
         raise PreventUpdate
@@ -527,7 +546,7 @@ def update_options(storedJSON):
 
 
 
-@app.callback([Output('activity-ids', 'children'), Output('selected-dataframe-container', 'style'),               Output('activities-json', 'children')], [Input('data-upload', 'contents')],
+@app.callback([Output('activity-ids', 'children'), Output('selected-dataframe-container', 'style'),               Output('downloadable-div-store', 'hiddenDivData')], [Input('data-upload', 'contents')],
               [State('data-upload', 'filename'),
                State('data-upload', 'last_modified')])
 def process_uploaded(list_of_contents, list_of_names, list_of_dates):
@@ -542,12 +561,13 @@ def process_uploaded(list_of_contents, list_of_names, list_of_dates):
             ]
             dfTupList = list(chain(*dfTupList))
         except Exception as e:
-            print("excepted: stuff")
+            raise e
             print(e)
             return None
         df_optionL = [data_id for (data_id, _) in dfTupList]
         optionJSON = json.dumps(df_optionL)
-        return (optionJSON, None, jsonify_dfs(dfTupList))
+        # return (optionJSON, None, jsonify_dfs(dfTupList))
+        return (optionJSON, None, csvify_dfs(dfTupList))
 
 
 if __name__ == "__main__":

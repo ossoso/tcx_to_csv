@@ -1,0 +1,7 @@
+include hiddendivdownloaderbutton/hiddendivdownloaderbutton.min.js
+include hiddendivdownloaderbutton/hiddendivdownloaderbutton.min.js.map
+include hiddendivdownloaderbutton/metadata.json
+include hiddendivdownloaderbutton/package-info.json
+include README.md
+include LICENSE
+include package.json

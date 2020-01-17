@@ -226,3 +226,7 @@ tmp/
 temp/
 
 # End of https://www.gitignore.io/api/node
+
+# Cypress
+cypress_starter/
+**/package-lock.json

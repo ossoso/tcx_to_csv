@@ -46,20 +46,6 @@ server = app.server
 
 def datashader_figs():
     return [
-        # html.Div(
-        #     id="header",
-        #     children=[
-        #         html.Div(
-        #             [
-        #                 html.H3(
-        #                     "Select range by dragging to calculate average power"
-        #                 )
-        #         ],
-        #             className="eight columns",
-        #         ),
-        #     ],
-        #     className="row",
-        # ),
         html.Hr(),
         html.Div([
             html.Div(
@@ -194,7 +180,7 @@ def power_stats(fit_df):
     del_t = del_t.iloc[:-1]
     p = fit_df[POWER_COLNAME].iloc[:-1]
     p_df = pd.concat((del_t, p), axis=1).dropna(axis=0)
-    energy = p_df.sum(axis=0).sum()
+    energy = p_df[POWER_COLNAME].sum()
     duration = p_df[TIME_COLNAME].sum()
     p_avg = energy / duration
     return {'average power (Watt)': p_avg, 'duration (s)': duration}

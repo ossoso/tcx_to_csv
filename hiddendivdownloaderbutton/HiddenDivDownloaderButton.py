@@ -3,8 +3,8 @@
 from dash.development.base_component import Component, _explicitize_args
 
 
-class HiddenDivDownloaderButton(Component):
-    """A HiddenDivDownloaderButton component.
+class Hiddendivdownloaderbutton(Component):
+    """A Hiddendivdownloaderbutton component.
 ExampleComponent is an example component.
 It takes a property, `label`, and
 displays it.
@@ -14,15 +14,14 @@ which is editable by the user.
 Keyword arguments:
 - id (string; optional): The ID used to identify this component in Dash callbacks.
 - label (string; required): A label that will be printed when this component is rendered.
-- filename (string; optional): The basename of the csvStr file to download.
-- hiddenDivData (string; optional): String that will be provided as a download."""
+- value (string; optional): The value displayed in the input."""
     @_explicitize_args
-    def __init__(self, id=Component.UNDEFINED, label=Component.REQUIRED, filename=Component.UNDEFINED, hiddenDivData=Component.UNDEFINED, **kwargs):
-        self._prop_names = ['id', 'label', 'filename', 'hiddenDivData']
-        self._type = 'HiddenDivDownloaderButton'
+    def __init__(self, id=Component.UNDEFINED, label=Component.REQUIRED, value=Component.UNDEFINED, **kwargs):
+        self._prop_names = ['id', 'label', 'value']
+        self._type = 'Hiddendivdownloaderbutton'
         self._namespace = 'hiddendivdownloaderbutton'
         self._valid_wildcard_attributes =            []
-        self.available_properties = ['id', 'label', 'filename', 'hiddenDivData']
+        self.available_properties = ['id', 'label', 'value']
         self.available_wildcard_properties =            []
 
         _explicit_args = kwargs.pop('_explicit_args')
@@ -34,4 +33,4 @@ Keyword arguments:
             if k not in args:
                 raise TypeError(
                     'Required argument `' + k + '` was not specified.')
-        super(HiddenDivDownloaderButton, self).__init__(**args)
+        super(Hiddendivdownloaderbutton, self).__init__(**args)

@@ -8,5 +8,5 @@ numpy==1.17.4
 dash==1.4.1
 simplejson==3.17.0
 datashader==0.9.0
-lxml==4.4.2
+lxml==4.6.2
 gunicorn

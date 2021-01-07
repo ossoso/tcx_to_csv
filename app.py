@@ -8,7 +8,7 @@ from os.path import basename, splitext
 from collections import OrderedDict
 from itertools import chain
 import dash
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output, State, ClientsideFunction
 from dash.exceptions import PreventUpdate
 import dash_core_components as dcc
 import dash_html_components as html
@@ -22,7 +22,7 @@ import numpy as np
 
 from inspect import getsourcefile
 
-sys.path.append('./tcx_to_csv')
+sys.path.append("./tcx_to_csv")
 
 from tcx_converter import convert_to_csv
 from hiddendivdownloaderbutton import HiddenDivDownloaderButton
@@ -34,7 +34,7 @@ external_stylesheets = [
     "/assets/style.css",
 ]
 
-INVISIBLE = {'display': 'none'}
+INVISIBLE = {"display": "none"}
 
 app = dash.Dash(
     __name__,
@@ -45,101 +45,121 @@ app = dash.Dash(
 )
 server = app.server
 
+
 def datashader_figs():
     return [
         html.Hr(),
-        html.Div([
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.P(
-                                "Click and drag on the plot to calculate average power for effort",
-                                id="header-1",
-                            ),
-                            dcc.Graph(
-                                id="graph-1", config={"doubleClick": "reset"}
-                            ),
-                        ], className="twelve columns",
-                    )
-                ], className="row",
-            ),
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.P(
-                                id="header-2",
-                            ),
-                        dcc.Graph(id="graph-2", style=INVISIBLE),
-                        ], className="twelve columns",
-                    )
-                ], className="row",
-            )
-        ], id='graphing-container', style=INVISIBLE)
+        html.Div(
+            [
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.P(
+                                    "Click and drag segment to calculate average power",
+                                    className="caption",
+                                    id="header-1",
+                                ),
+                                dcc.Graph(
+                                    id="graph-1", config={"doubleClick": "reset"}
+                                ),
+                            ],
+                            className="twelve columns",
+                        )
+                    ],
+                    className="row",
+                ),
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.P(
+                                    className="caption",
+                                    id="header-2",
+                                ),
+                                dcc.Graph(id="graph-2", style=INVISIBLE),
+                            ],
+                            className="twelve columns",
+                        )
+                    ],
+                    className="row", 
+                ),
+            ],
+            id="graphing-container",
+            style=INVISIBLE,
+        ),
     ]
 
 
-POWER_COLNAME = 'Power(Watts)'
-CADENCE_COLNAME = 'Cadence(1/min)'
-TIME_COLNAME = 'Time(s)'
+POWER_COLNAME = "Power(Watts)"
+CADENCE_COLNAME = "Cadence(1/min)"
+TIME_COLNAME = "Time(s)"
 
-#
 USED_COLNAMES = [POWER_COLNAME, CADENCE_COLNAME, TIME_COLNAME]
 
-TIME_MATCH_STR = 'time'
+TIME_MATCH_STR = "time"
 
-PERF_COLS_MATCH_STR = [
-    'time',
-    'power',
-    'cadence',
-    'heart'
-]
+PERF_COLS_MATCH_STR = ["time", "power", "cadence", "heart"]
 
 match_str_colname_map = OrderedDict(zip(PERF_COLS_MATCH_STR, USED_COLNAMES))
+
 
 def _parseSelectedJSON(option_id, jsonStr):
     csvStr = json.loads(jsonStr)[option_id]
     csvBuff = io.StringIO(csvStr)
     return pd.read_csv(csvBuff)
 
+
 def csvify_dfs(dfDictL):
     newL = {filename: df.to_csv() for (filename, df) in dfDictL}
     return json.dumps(newL, ignore_nan=True)
+
 
 def jsonify_dfs(dfDictL):
     newL = {filename: df.to_dict() for (filename, df) in dfDictL}
     return json.dumps(newL, ignore_nan=True)
 
+
 def import_csv(source, filename, src_type="filepath"):
-    if src_type == 'filepath':
+    if src_type == "filepath":
         src_in = source
-    elif src_type == 'bytestr':
+    elif src_type == "bytestr":
         src_in = io.StringIO(source)
     else:
         raise Exception("only sources of type filepath and bytestring permitted")
-    raw_df = pd.read_csv(src_in, comment='#', encoding='utf-8')
+    raw_df = pd.read_csv(src_in, comment="#", encoding="utf-8")
     cols = raw_df.columns
     match_sel = [
-        next((True for cn in PERF_COLS_MATCH_STR if
-            (re.match(cn, col, flags=re.IGNORECASE)) is not None), False) for
-        col in cols
+        next(
+            (
+                True
+                for cn in PERF_COLS_MATCH_STR
+                if (re.match(cn, col, flags=re.IGNORECASE)) is not None
+            ),
+            False,
+        )
+        for col in cols
     ]
     sel_df = raw_df.iloc[:, match_sel]
-    dfTup = (splitext(basename(filename))[0], sel_df.rename(columns=match_str_colname_map))
+    dfTup = (
+        splitext(basename(filename))[0],
+        sel_df.rename(columns=match_str_colname_map),
+    )
     return dfTup
+
 
 def import_tcx_mem(source):
-    csv_files = convert_to_csv(source, src_type='string')
-    print(csv_files.__str__()[0:400])
-    dfTup = tuple(import_csv(csvStr, fname, 'bytestr') for fname, csvStr in csv_files)
+    csv_files = convert_to_csv(source, src_type="string")
+    dfTup = tuple(import_csv(csvStr, fname, "bytestr") for fname, csvStr in csv_files)
     return dfTup
 
-# # Default plot ranges:
+
+# Default plot ranges:
 def _plot_ranges(start, end, signal):
     x_range = (start, end)
     y_range = (1.2 * signal.min(), 1.2 * signal.max())
     return (x_range, y_range)
+
 
 def power_stats(fit_df):
     t = fit_df[TIME_COLNAME]
@@ -147,30 +167,28 @@ def power_stats(fit_df):
     del_t = del_t.iloc[:-1]
     p = fit_df[POWER_COLNAME].iloc[:-1]
     p_df = pd.concat((del_t, p), axis=1).dropna(axis=0)
-    energy = p_df[POWER_COLNAME].sum()
-    duration = p_df[TIME_COLNAME].sum()
-    p_avg = energy / duration
-    return {'average power (Watt)': p_avg, 'duration (s)': duration}
+    energy = p_df[POWER_COLNAME]
+    duration = p_df[TIME_COLNAME]
+    p_avg = np.average(energy, weights=duration)
+    return {"average power (Watt)": p_avg, "duration (s)": duration}
+
 
 max_points = 100000
 
-
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-
 def parse_contents(contents, filename, date):
-    content_type, content_string = contents.split(',')
+    content_type, content_string = contents.split(",")
     decoded = base64.b64decode(content_string)
-    stringBuff = decoded.decode('utf-8')
-    bytestring = bytes(bytearray(stringBuff, encoding = 'utf-8'))
+    stringBuff = decoded.decode("utf-8")
+    bytestring = bytes(bytearray(stringBuff, encoding="utf-8"))
     try:
-        if 'tcx' in filename:
+        if "tcx" in filename:
             # Assume that the user uploaded a TCX file
             dfTup = import_tcx_mem(bytestring)
-        if 'csv' in filename:
+        if "csv" in filename:
             # Assume that the user uploaded a CSV file
             dfTup = tuple(import_csv(bytestring, filename, src_type="bytestr"))
     except Exception as e:
-        print('error parsing contents')
+        print("error parsing contents")
         raise e
     return dfTup
 
@@ -201,7 +219,7 @@ def setup_plot_canvas(df):
 
 
 def generateFig(x, y, z, scope):
-    fullFig = scope != 'full'
+    fullFig = scope != "full"
     fig = {
         "data": [
             {
@@ -210,9 +228,10 @@ def generateFig(x, y, z, scope):
                 "z": z,
                 "type": "heatmap",
                 "showscale": False,
-                "colorscale": [[0, "rgba(255, 255, 255,0)"],
-                               [1, ( "#a3a7b0" if fullFig else
-                                      "#75baf2")]],
+                "colorscale": [
+                    [0, "rgba(255, 255, 255,0)"],
+                    [1, ("#a3a7b0" if fullFig else "#75baf2")],
+                ],
             }
         ],
         "layout": {
@@ -221,22 +240,25 @@ def generateFig(x, y, z, scope):
             "xaxis": {
                 "fixedrange": fullFig,
                 "showline": True,
+                "title": "Time (s)",
                 "zeroline": False,
-                "showgrid": False,
+                "showgrid": True,
                 "showticklabels": True,
                 "color": "#a3a7b0",
+                "automargin": True
             },
             "yaxis": {
                 "fixedrange": True,
                 "showline": True,
+                "title": "Power (W)",
                 "zeroline": False,
-                "showgrid": False,
+                "showgrid": True,
                 "showticklabels": True,
                 "ticks": "",
                 "color": "#a3a7b0",
             },
-            "plot_bgcolor": "#23272c",
-            "paper_bgcolor": "#23272c",
+            "plot_bgcolor": "#FFFFFF",
+            "paper_bgcolor": "#FFFFFF",
         },
     }
     return fig
@@ -244,49 +266,82 @@ def generateFig(x, y, z, scope):
 
 app.layout = html.Div(
     [
-        html.Div([
-            dcc.Upload(
-                id='data-upload',
-                className='data-upload',
-                children=html.Div([
-                    'Drag and Drop or ',
-                    html.A('Select File')
-                ]),
-                style={
-                    'width': '100%',
-                    'height': '60px',
-                    'lineHeight': '60px',
-                    'borderWidth': '1px',
-                    'borderStyle': 'dashed',
-                    'borderRadius': '5px',
-                    'textAlign': 'center',
-                    'margin': '10px'
-                },
-                # Allow multiple files to be uploaded
-        multiple=True
-            ),
-            html.Div(id='selected-dataframe-container', children=[
-                html.Div([
-                    html.Div([
-                    dcc.Dropdown(
-                        id='loaded-dataframes', searchable=False
-                    )], className="twelve columns"
-                    ),
-                    HiddenDivDownloaderButton(
-                        id='downloadable-div-store', label='Download CSV'),
-                    # html.Button(id='plot-imported-btn', n_clicks=0, children='Plot'),
-                    # html.Button(id='downloadable-div-store', n_clicks=0, children='Download CSV'),
-                ], className="row"),
-                html.Div(id='activity-ids', style=INVISIBLE),
-                *datashader_figs(),
-            ]),
-        ]),
+        html.Div(
+            [
+                dcc.Upload(
+                    id="data-upload",
+                    className="data-upload non-dropdown",
+                    children=html.Div(["Drag and Drop or ", html.A("Select File")]),
+                    style={
+                        "height": "10rem",
+                        "lineHeight": "10rem",
+                        "borderWidth": "2px",
+                        "padding": "1.5rem",
+                        "fontWeight": "700",
+                        "borderStyle": "dashed",
+                        "borderRadius": "5px",
+                        "textAlign": "center",
+                    },
+                    # Allow multiple files to be uploaded
+                    multiple=True,
+                ),
+                html.Div(
+                    id="selected-dataframe-container",
+                    children=[
+                        html.Div(
+                            [
+                                html.Div(
+                                    [
+                                        dcc.Dropdown(
+                                            id="loaded-dataframes", searchable=False, style=INVISIBLE,
+                                        ),
+                                        html.Div(
+                                            [
+                                                HiddenDivDownloaderButton(
+                                                    id="downloadable-div-store", label="Download CSV"
+                                                ),
+                                            ],
+                                            id="button-div",
+                                            className="non-dropdown",
+                                            style={"display": "flex", "justify-content": "flex-end"},
+                                        )
+                                    ],
+                                    className="twelve columns",
+                                ),
+                                # html.Button(id='plot-imported-btn', n_clicks=0, children='Plot'),
+                                # html.Button(id='downloadable-div-store', n_clicks=0, children='Download CSV'),
+                            ],
+                            className="row",
+                        ),
+                        html.Div(id="activity-ids", style=INVISIBLE),
+                        html.Div(id="dummy-callback-target", style=INVISIBLE),
+                        *datashader_figs(),
+                    ],
+                ),
+            ]
+        ),
     ]
 )
 
 # Callbacks
 
-@app.callback( Output("header-2", "children"), [Input("graph-1", "relayoutData")], [State('loaded-dataframes', 'value'), State('downloadable-div-store', 'hiddenDivData')])
+app.clientside_callback(
+    ClientsideFunction(
+            namespace='clientside',
+            function_name='focusPlots'
+    ),
+Output("dummy-callback-target", "title"), #Callback needs an output, so this is dummy
+[Input("graph-2", "style")], #This triggers the javascript callback
+)
+
+@app.callback(
+    Output("header-2", "children"),
+    [Input("graph-1", "relayoutData")],
+    [
+        State("loaded-dataframes", "value"),
+        State("downloadable-div-store", "hiddenDivData"),
+    ],
+)
 def selectionRange(selection, value, jsonStr):
     if (
         selection is None
@@ -308,19 +363,32 @@ def selectionRange(selection, value, jsonStr):
                 abs(int(selection["xaxis.range[1]"]) - int(selection["xaxis.range[0]"]))
             )
             # number_print = " points selected between {0:,.4} and {1:,.4}".format(
-            number_print = " Your average power for period {0}s..{1}s was {2:,.4} Watts".format(
-                *(round(selection[sel_range], 2) for sel_range
-                 in ["xaxis.range[0]", "xaxis.range[1]"]), round(power, 2)
+            number_print = dcc.Markdown(
+                "Average power **{0}s..{1}s**: **{2:,.4} Watts**".format(
+                    *(
+                        round(selection[sel_range], 0)
+                        for sel_range in ["xaxis.range[0]", "xaxis.range[1]"]
+                    ),
+                    round(power, 2)
+                )
             )
     return number_print
 
-@app.callback([Output("graph-2", "figure"), Output("graph-2", "style")], [Input("graph-1", "relayoutData")], [State('loaded-dataframes', 'value'), State('downloadable-div-store', 'hiddenDivData')])
+
+@app.callback(
+    [Output("graph-2", "figure"), Output("graph-2", "style")],
+    [Input("graph-1", "relayoutData")],
+    [
+        State("loaded-dataframes", "value"),
+        State("downloadable-div-store", "hiddenDivData"),
+    ],
+)
 def selectionHighlight(selection, value, jsonStr):
     if value is None:
         raise PreventUpdate
     df = _parseSelectedJSON(value, jsonStr)
     fig_args = setup_plot_canvas(df)
-    fig2 = generateFig(*fig_args, scope='selection')
+    fig2 = generateFig(*fig_args, scope="selection")
     if (
         selection is not None
         and "xaxis.range[0]" in selection
@@ -350,18 +418,24 @@ def selectionHighlight(selection, value, jsonStr):
     return (fig2, None)
 
 
-@app.callback(Output("downloadable-div-store", "filename"), [Input('loaded-dataframes', 'value')])
+@app.callback(
+    Output("downloadable-div-store", "filename"), [Input("loaded-dataframes", "value")]
+)
 def updateDownloadFName(filename):
     return filename
 
 
-@app.callback([Output("graph-1", "figure"), Output("graphing-container", "style")], [Input("graph-1", "relayoutData"), Input('loaded-dataframes', 'value')], [State('downloadable-div-store', 'hiddenDivData')])
+@app.callback(
+    [Output("graph-1", "figure"), Output("graphing-container", "style")],
+    [Input("graph-1", "relayoutData"), Input("loaded-dataframes", "value")],
+    [State("downloadable-div-store", "hiddenDivData")],
+)
 def draw_undecimated_data(selection, value, jsonStr):
     if value is None:
         raise PreventUpdate
     df = _parseSelectedJSON(value, jsonStr)
     fig_args = setup_plot_canvas(df)
-    fig1 = generateFig(*fig_args, scope='full')
+    fig1 = generateFig(*fig_args, scope="full")
     if (
         selection is not None
         and "xaxis.range[0]" in selection
@@ -392,28 +466,35 @@ def draw_undecimated_data(selection, value, jsonStr):
         high_res = fig1.copy()
     return (high_res, None)
 
-@app.callback(Output('loaded-dataframes', 'options'),
-               [Input('activity-ids', 'children')])
+
+@app.callback(
+    [Output("loaded-dataframes", "options"), Output("loaded-dataframes", "style")], [Input("activity-ids", "children")]
+)
 def update_options(storedJSON):
     if not storedJSON:
         raise PreventUpdate
     optionL = json.loads(storedJSON)
-    return [{'label': id, 'value': id} for id in optionL]
+    return ([{"label": id, "value": id} for id in optionL], None)
 
 
-
-@app.callback([Output('activity-ids', 'children'), Output('selected-dataframe-container', 'style'),               Output('downloadable-div-store', 'hiddenDivData')], [Input('data-upload', 'contents')],
-              [State('data-upload', 'filename'),
-               State('data-upload', 'last_modified')])
+@app.callback(
+    [
+        Output("activity-ids", "children"),
+        Output("selected-dataframe-container", "style"),
+        Output("downloadable-div-store", "hiddenDivData"),
+    ],
+    [Input("data-upload", "contents")],
+    [State("data-upload", "filename"), State("data-upload", "last_modified")],
+)
 def process_uploaded(list_of_contents, list_of_names, list_of_dates):
-    #to_iterable = lambda a: a if isinstance(a, tuple) else (a,)
+    # to_iterable = lambda a: a if isinstance(a, tuple) else (a,)
     if list_of_contents is None:
         return (None, INVISIBLE, None)
     else:
         try:
             dfTupList = [
-                parse_contents(c, n, d) for c, n, d in
-                zip(list_of_contents, list_of_names, list_of_dates)
+                parse_contents(c, n, d)
+                for c, n, d in zip(list_of_contents, list_of_names, list_of_dates)
             ]
             dfTupList = list(chain(*dfTupList))
         except Exception as e:
